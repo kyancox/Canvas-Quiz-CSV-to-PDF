@@ -83,6 +83,14 @@ class HTMLToLatexConverter:
             # Plain text - format for readability
             text = html_content.strip()
             
+            # Replace non-breaking spaces and other unicode spaces with regular spaces
+            text = text.replace('\u00a0', ' ')  # non-breaking space
+            text = text.replace('\u2003', ' ')  # em space
+            text = text.replace('\u2002', ' ')  # en space
+            
+            # Collapse multiple spaces (from missing equations in Canvas export)
+            text = re.sub(r'  +', ' ', text)
+            
             # Check if this looks like code/algorithm with numbered lines
             # Pattern: "1. ... 2. ... 3. ..." or similar
             if re.search(r'\d+\.\s+', text):
@@ -118,7 +126,8 @@ class HTMLToLatexConverter:
         # Handle equation images first (before converting to text)
         for img in soup.find_all('img', class_='equation_image'):
             latex = cls.convert_equation_image(img)
-            img.replace_with(latex)
+            # Add spaces around the equation to preserve word boundaries
+            img.replace_with(f' {latex} ')
         
         # Convert HTML tags to LaTeX
         for tag in soup.find_all('strong') + soup.find_all('b'):
@@ -135,12 +144,46 @@ class HTMLToLatexConverter:
             content = tag.get_text()
             tag.replace_with(f'$^{{{content}}}$')
         
-        # Get text content
-        text = soup.get_text()
+        # Get text content - use space as separator to prevent words from running together
+        text = soup.get_text(separator=' ')
+        
+        # Replace non-breaking spaces and other unicode spaces with regular spaces
+        text = text.replace('\u00a0', ' ')  # non-breaking space
+        text = text.replace('\u2003', ' ')  # em space
+        text = text.replace('\u2002', ' ')  # en space
         
         # Clean up whitespace but preserve paragraph breaks
         text = re.sub(r'\n\s*\n', '\n\n', text)
+        # Collapse multiple spaces into single space (from missing equations in Canvas export)
+        text = re.sub(r'  +', ' ', text)
         text = text.strip()
+        
+        # Check if this looks like code/algorithm with numbered lines
+        # Pattern: "1. ... 2. ... 3. ..." or similar
+        if re.search(r'\d+\.\s+', text):
+            # Replace numbered lines with actual line breaks for algorithms
+            # Match patterns like "2. ", "3. ", etc. but not at the start
+            text = re.sub(r'(\d+\.\s+)', r'\n\1', text)
+            text = text.strip()  # Remove leading newline
+        
+        # Convert math expressions with ^ to LaTeX math mode
+        # Handle all patterns in a single pass to avoid nested $ signs
+        def convert_math_expr(match):
+            expr = match.group(0)
+            # Already in math mode
+            if expr.startswith('$'):
+                return expr
+            # Parenthesized expression possibly with exponent: (b^k/2) or (b^k/2)^2
+            paren_match = re.match(r'\(([^)]*\^[^)]*)\)(\^\d+)?', expr)
+            if paren_match:
+                inner = paren_match.group(1)
+                exp = paren_match.group(2)
+                return f'$({inner})' + (f'^{{{exp[1:]}}}' if exp else '') + '$'
+            # Simple expression: n^2, b^k, b^k/2
+            return f'${expr}$'
+        
+        # Find all expressions with ^
+        text = re.sub(r'\([^)]*\^[^)]*\)(?:\^\d+)?|\w\^[\w/]+', convert_math_expr, text)
         
         # Don't escape text that already contains LaTeX commands
         if '\\' in text or re.search(r'\$.*\$', text):
@@ -287,10 +330,18 @@ class LaTeXGenerator:
             question_text = self.converter.html_to_latex(q['question_text'], is_question=True)
             answer_text = self.converter.html_to_latex(q['answer'], is_question=False)
             
+            # Add line breaks after sentences to help LaTeX with very long paragraphs
+            # Only do this for very long single-line answers
+            if '\n' not in answer_text and len(answer_text) > 200:
+                # Add line breaks after periods to break up long text
+                answer_text = re.sub(r'\.\s+', r'. \\\\ ', answer_text)
+            
             # Check if question looks like code/algorithm - use small font
             if '\n' in question_text and re.search(r'\d+\.\s+', question_text):
+                # Replace newlines with LaTeX line breaks for proper formatting
+                algorithm_text = question_text.replace('\n', ' \\\\\n')
                 question_section = f"""\\begin{{small}}
-{question_text}
+{algorithm_text}
 \\end{{small}}"""
             else:
                 question_section = question_text
@@ -302,7 +353,9 @@ class LaTeXGenerator:
 \\vspace{{0.5em}}
 \\noindent\\textbf{{Answer:}}
 
+\\begin{{RaggedRight}}
 {answer_text}
+\\end{{RaggedRight}}
 
 \\vspace{{1em}}
 """
