@@ -338,8 +338,10 @@ class LaTeXGenerator:
             
             # Check if question looks like code/algorithm - use small font
             if '\n' in question_text and re.search(r'\d+\.\s+', question_text):
+                # Clean up extra blank lines in algorithm (keep only single newlines)
+                algorithm_text = re.sub(r'\n\s*\n+', '\n', question_text)
                 # Replace newlines with LaTeX line breaks for proper formatting
-                algorithm_text = question_text.replace('\n', ' \\\\\n')
+                algorithm_text = algorithm_text.replace('\n', ' \\\\\n')
                 question_section = f"""\\begin{{small}}
 {algorithm_text}
 \\end{{small}}"""
