@@ -1,0 +1,30 @@
+# Canvas Quiz CSV to PDF Converter
+
+## Project Overview
+This Python project converts Canvas LMS quiz reports (CSV format) into formatted LaTeX documents and PDFs. It processes student quiz data, including questions, answers, and scores, and generates individual PDF reports for each student.
+
+## Project Structure
+- `canvas_to_latex.py`: Main conversion script with CSV parsing and LaTeX generation logic
+- `template.tex`: LaTeX template used for PDF generation
+- `debug_parser.py`: Debugging utilities for parser development
+- `output/latex/`: Generated LaTeX files (one per student)
+- `output/pdf/`: Generated PDF files (one per student)
+- `requirements.txt`: Python dependencies (pandas, beautifulsoup4, markdown-it-py, pygments, rich)
+
+## Usage Example
+```bash
+python canvas_to_latex.py --csv "Quiz 4 - Dynamic Programming Student Analysis Report.csv" --output output --limit 5
+```
+
+## Important Testing Guidelines
+⚠️ **CRITICAL: NEVER test with --limit over 10 students!**
+- Always use `--limit 10` or less when testing
+- This prevents excessive PDF generation and keeps testing manageable
+- Use `--limit 5` for quick iterations during development
+
+## Code Style
+- Follow PEP 8 style guide
+- Use type hints for function parameters and return values
+- Write descriptive variable names (e.g., `student_name` not `sn`)
+- Add docstrings to all public functions
+- Keep functions focused and single-purpose
