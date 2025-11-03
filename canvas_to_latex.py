@@ -308,11 +308,12 @@ class CanvasQuizParser:
 class LaTeXGenerator:
     """Generates LaTeX files from student data."""
     
-    def __init__(self, template_path: str, output_dir: str):
+    def __init__(self, template_path: str, output_dir: str, quiz_title: str = "Quiz Submission"):
         """Initialize generator with template and output directory."""
         self.template_path = template_path
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.quiz_title = quiz_title
         
         with open(template_path, 'r') as f:
             self.template = f.read()
@@ -393,7 +394,8 @@ class LaTeXGenerator:
         questions_section = self.generate_questions_section(student['questions'])
         
         # Populate template
-        content = self.template.replace('STUDENTNAME', student['name'])
+        content = self.template.replace('QUIZTITLE', self.quiz_title)
+        content = content.replace('STUDENTNAME', student['name'])
         content = content.replace('STUDENTID', str(student['id']))
         content = content.replace('QUESTIONSSECTION', questions_section)
         
@@ -501,8 +503,14 @@ def main():
             print("No students found with graded essay questions.")
             return
         
+        # Extract quiz title from CSV filename
+        csv_filename = os.path.basename(args.csv)
+        # Remove " Student Analysis Report.csv" or just ".csv" if pattern doesn't match
+        quiz_title = csv_filename.replace(' Student Analysis Report.csv', '').replace('.csv', '')
+        print(f"Quiz title: {quiz_title}")
+        
         # Generate LaTeX files
-        generator = LaTeXGenerator(args.template, args.output)
+        generator = LaTeXGenerator(args.template, args.output, quiz_title)
         
         success_count = 0
         pdf_success_count = 0
