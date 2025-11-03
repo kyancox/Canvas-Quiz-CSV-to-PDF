@@ -80,19 +80,37 @@ class HTMLToLatexConverter:
         
         # If it looks like plain text (not HTML), handle it specially
         if not '<' in html_content:
-            # Plain text - just clean it up
+            # Plain text - format for readability
             text = html_content.strip()
+            
+            # Check if this looks like code/algorithm with numbered lines
+            # Pattern: "1. ... 2. ... 3. ..." or similar
+            if re.search(r'\d+\.\s+', text):
+                # Replace numbered lines with actual line breaks for algorithms
+                # Match patterns like "2. ", "3. ", etc. but not at the start
+                text = re.sub(r'(\d+\.\s+)', r'\n\1', text)
+                text = text.strip()  # Remove leading newline
+            
             # Preserve existing LaTeX, only escape problematic chars
-            # Don't escape if it already has LaTeX commands
             if '\\' in text or '$' in text:
                 # Has LaTeX - only escape &, %, #
                 text = text.replace('&', r'\&')
                 text = text.replace('%', r'\%') 
                 text = text.replace('#', r'\#')
-                return text
             else:
-                # No LaTeX - escape special chars except those in code-like content
-                return cls.escape_latex(text, preserve_latex=False)
+                # No LaTeX - escape special chars that would break compilation
+                for char in ['&', '%', '$', '#', '_']:
+                    if char in cls.LATEX_SPECIAL_CHARS:
+                        text = text.replace(char, cls.LATEX_SPECIAL_CHARS[char])
+            
+            # If it's a question (algorithm), use verbatim-style formatting
+            if is_question and '\n' in text:
+                # Put algorithm-style text in a small font environment
+                lines = text.split('\n')
+                formatted_lines = [line.replace('    ', r'\quad ') for line in lines]  # Convert spaces to LaTeX spacing
+                text = '\n\n'.join(formatted_lines)
+            
+            return text
         
         # Parse HTML
         soup = BeautifulSoup(html_content, 'html5lib')
@@ -120,8 +138,8 @@ class HTMLToLatexConverter:
         # Get text content
         text = soup.get_text()
         
-        # Clean up whitespace
-        text = re.sub(r'\n\s*\n', '\n\n', text)  # Multiple newlines to paragraph breaks
+        # Clean up whitespace but preserve paragraph breaks
+        text = re.sub(r'\n\s*\n', '\n\n', text)
         text = text.strip()
         
         # Don't escape text that already contains LaTeX commands
@@ -130,12 +148,11 @@ class HTMLToLatexConverter:
             text = text.replace('&', r'\&')
             text = text.replace('%', r'\%')
             text = text.replace('#', r'\#')
-            return text
-        
-        # No LaTeX - escape problematic special chars
-        for char in ['&', '%', '$', '#', '_']:
-            if char in cls.LATEX_SPECIAL_CHARS:
-                text = text.replace(char, cls.LATEX_SPECIAL_CHARS[char])
+        else:
+            # No LaTeX - escape problematic special chars
+            for char in ['&', '%', '$', '#', '_']:
+                if char in cls.LATEX_SPECIAL_CHARS:
+                    text = text.replace(char, cls.LATEX_SPECIAL_CHARS[char])
         
         return text
 
@@ -270,9 +287,17 @@ class LaTeXGenerator:
             question_text = self.converter.html_to_latex(q['question_text'], is_question=True)
             answer_text = self.converter.html_to_latex(q['answer'], is_question=False)
             
+            # Check if question looks like code/algorithm - use small font
+            if '\n' in question_text and re.search(r'\d+\.\s+', question_text):
+                question_section = f"""\\begin{{small}}
+{question_text}
+\\end{{small}}"""
+            else:
+                question_section = question_text
+            
             section = f"""\\section*{{Question {i}}}
 
-{question_text}
+{question_section}
 
 \\vspace{{0.5em}}
 \\noindent\\textbf{{Answer:}}

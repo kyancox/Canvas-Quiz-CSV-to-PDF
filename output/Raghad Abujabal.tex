@@ -19,7 +19,31 @@
 
 \section*{Question 1}
 
-1. SuperSort(A) { \\ sorts array A recursively2.    // base cases3.    if (length(A) == 1) return;4.    if (length(A) == 2) {5.       swap the two elements if they’re out of order;6.       return;7.    } else { // recursive calls8.       SuperSort the first two thirds of A;9.       SuperSort the second two thirds of A;10.      SuperSort the first two thirds of A again;11.    }12. }
+\begin{small}
+1. SuperSort(A) { \\ sorts array A recursively
+
+2.    // base cases
+
+3.    if (length(A) == 1) return;
+
+4.    if (length(A) == 2) {
+
+5.       swap the two elements if they’re out of order;
+
+6.       return;
+
+7.    } else { // recursive calls
+
+8.       SuperSort the first two thirds of A;
+
+9.       SuperSort the second two thirds of A;
+
+10.      SuperSort the first two thirds of A again;
+
+11.    }
+
+12. }
+\end{small}
 
 \vspace{0.5em}
 \noindent\textbf{Answer:}
@@ -53,9 +77,13 @@ the solution would just be adding the constant factors,
 \section*{Question 4}
 
 Suppose you are given positive integers  where   for nonnegative integer . You would like to determine  using only the elementary operations of addition, subtraction, multiplication, and division.
+
 A brute force algorithm is described below.
 
+
+
 The brute force algorithm requires  time to find the correct value of . To help with this task, your friend designed a function called  which takes input  of the form  and computes  in  time. In Part A, you will use  to design a divide and conquer algorithm to find the correct value of  with smaller asymptotic runtime than the above brute force algorithm. Hint: , so  such that  if  is even or  if  is odd.
+
 Part A: Design a divide and conquer algorithm that has an asymptotically faster performance than the given brute force algorithm.
 
 \vspace{0.5em}
