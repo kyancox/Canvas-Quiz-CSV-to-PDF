@@ -144,6 +144,11 @@ class HTMLToLatexConverter:
             content = tag.get_text()
             tag.replace_with(f'$^{{{content}}}$')
         
+        # Handle paragraph tags - convert to line breaks
+        for tag in soup.find_all('p'):
+            # Add newline after each paragraph
+            tag.append('\n')
+        
         # Get text content - use space as separator to prevent words from running together
         text = soup.get_text(separator=' ')
         
@@ -330,11 +335,26 @@ class LaTeXGenerator:
             question_text = self.converter.html_to_latex(q['question_text'], is_question=True)
             answer_text = self.converter.html_to_latex(q['answer'], is_question=False)
             
-            # Add line breaks after sentences to help LaTeX with very long paragraphs
-            # Only do this for very long single-line answers
-            if '\n' not in answer_text and len(answer_text) > 200:
-                # Add line breaks after periods to break up long text
+            # Check if answer looks like code/algorithm (multiple lines with code patterns)
+            answer_looks_like_code = (
+                '\n' in answer_text and 
+                (re.search(r'(while|if|else|begin|return|for|Input:|Output:)', answer_text) or
+                 re.search(r'[A-Z]\[.*\]', answer_text))  # Array notation like A[i]
+            )
+            
+            if answer_looks_like_code:
+                # Format as code block with small font and proper line breaks
+                code_text = re.sub(r'\n\s*\n+', '\n', answer_text)  # Clean up extra blank lines
+                code_text = code_text.replace('\n', ' \\\\\n')
+                answer_section = f"""\\begin{{small}}
+{code_text}
+\\end{{small}}"""
+            elif '\n' not in answer_text and len(answer_text) > 200:
+                # Add line breaks after sentences to help LaTeX with very long paragraphs
                 answer_text = re.sub(r'\.\s+', r'. \\\\ ', answer_text)
+                answer_section = answer_text
+            else:
+                answer_section = answer_text
             
             # Check if question looks like code/algorithm - use small font
             if '\n' in question_text and re.search(r'\d+\.\s+', question_text):
@@ -355,9 +375,7 @@ class LaTeXGenerator:
 \\vspace{{0.5em}}
 \\noindent\\textbf{{Answer:}}
 
-\\begin{{RaggedRight}}
-{answer_text}
-\\end{{RaggedRight}}
+{answer_section}
 
 \\vspace{{1em}}
 """
