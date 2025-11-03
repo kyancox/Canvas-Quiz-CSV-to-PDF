@@ -393,9 +393,9 @@ class LaTeXGenerator:
         questions_section = self.generate_questions_section(student['questions'])
         
         # Populate template
-        content = self.template.replace('STUDENT_NAME', student['name'])
-        content = content.replace('STUDENT_ID', str(student['id']))
-        content = content.replace('QUESTIONS_SECTION', questions_section)
+        content = self.template.replace('STUDENTNAME', student['name'])
+        content = content.replace('STUDENTID', str(student['id']))
+        content = content.replace('QUESTIONSSECTION', questions_section)
         
         # Write file
         with open(filepath, 'w', encoding='utf-8') as f:
