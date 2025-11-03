@@ -16,6 +16,10 @@ from typing import Dict, List, Tuple, Optional
 
 import pandas as pd
 from bs4 import BeautifulSoup
+from rich.console import Console
+from rich.live import Live
+from rich.panel import Panel
+from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
 
 
 class HTMLToLatexConverter:
@@ -214,9 +218,10 @@ class CanvasQuizParser:
         self.df = None
         self.questions = {}  # ItemID -> Question Text mapping
         
-    def parse(self) -> None:
+    def parse(self, silent: bool = False) -> None:
         """Parse the CSV file."""
-        print(f"Reading CSV file: {self.csv_path}")
+        if not silent:
+            print(f"Reading CSV file: {self.csv_path}")
         self.df = pd.read_csv(self.csv_path)
         self._extract_questions_from_headers()
     
@@ -279,10 +284,10 @@ class CanvasQuizParser:
             questions_answered = []
             
             for status_col, q_info in self.questions.items():
-                # Use column name to access the data
-                item_type = row[self.df.columns[q_info['item_type_col']]]
-                status = row[status_col]
-                answer = row[self.df.columns[q_info['question_col']]]
+                # Use iloc to access the data by column index
+                item_type = row.iloc[q_info['item_type_col']]
+                status = row.iloc[status_col]
+                answer = row.iloc[q_info['question_col']]
                 
                 # Only include essay questions that were graded and have an answer
                 if (item_type == 'essay' and 
@@ -308,12 +313,13 @@ class CanvasQuizParser:
 class LaTeXGenerator:
     """Generates LaTeX files from student data."""
     
-    def __init__(self, template_path: str, output_dir: str, quiz_title: str = "Quiz Submission"):
+    def __init__(self, template_path: str, output_dir: str, quiz_title: str = "Quiz Submission", console: Console = None):
         """Initialize generator with template and output directory."""
         self.template_path = template_path
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.quiz_title = quiz_title
+        self.console = console or Console()
         
         with open(template_path, 'r') as f:
             self.template = f.read()
@@ -403,7 +409,7 @@ class LaTeXGenerator:
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
         
-        print(f"Generated: {filepath}")
+        self.console.print(f"[green]✓[/green] Generated: {filepath}")
         return filepath
     
     def compile_pdf(self, tex_filepath: Path) -> bool:
@@ -422,7 +428,7 @@ class LaTeXGenerator:
             # Check if PDF was created
             pdf_path = tex_filepath.with_suffix('.pdf')
             if pdf_path.exists():
-                print(f"Compiled PDF: {pdf_path}")
+                self.console.print(f"[blue]✓[/blue] Compiled PDF: {pdf_path}")
                 
                 # Clean up auxiliary files
                 for ext in ['.aux', '.log', '.out']:
@@ -432,114 +438,149 @@ class LaTeXGenerator:
                 
                 return True
             else:
-                print(f"Warning: PDF compilation failed for {tex_filepath}")
+                self.console.print(f"[yellow]⚠[/yellow] Warning: PDF compilation failed for {tex_filepath}")
                 if result.stderr:
-                    print(f"Error: {result.stderr}")
+                    self.console.print(f"[red]Error:[/red] {result.stderr}")
                 return False
                 
         except subprocess.TimeoutExpired:
-            print(f"Error: PDF compilation timed out for {tex_filepath}")
+            self.console.print(f"[red]✗[/red] Error: PDF compilation timed out for {tex_filepath}")
             return False
         except FileNotFoundError:
-            print("Error: pdflatex not found. Please install LaTeX (e.g., TeX Live or MiKTeX)")
+            self.console.print("[red]✗[/red] Error: pdflatex not found. Please install LaTeX (e.g., TeX Live or MiKTeX)")
             return False
         except Exception as e:
-            print(f"Error compiling PDF: {e}")
+            self.console.print(f"[red]✗[/red] Error compiling PDF: {e}")
             return False
 
 
 def main():
     """Main entry point for the CLI."""
-    parser = argparse.ArgumentParser(
+    arg_parser = argparse.ArgumentParser(
         description='Convert Canvas quiz CSV to individual student LaTeX/PDF files'
     )
-    parser.add_argument(
+    arg_parser.add_argument(
         '--csv',
         required=True,
         help='Path to Canvas quiz export CSV file'
     )
-    parser.add_argument(
+    arg_parser.add_argument(
         '--output',
         default='./output',
         help='Output directory for generated files (default: ./output)'
     )
-    parser.add_argument(
+    arg_parser.add_argument(
         '--template',
         default='template.tex',
         help='Path to LaTeX template file (default: template.tex)'
     )
-    parser.add_argument(
+    arg_parser.add_argument(
         '--limit',
         type=int,
         help='Limit number of students to process (for testing)'
     )
-    parser.add_argument(
+    arg_parser.add_argument(
         '--no-pdf',
         action='store_true',
         help='Skip PDF compilation, only generate .tex files'
     )
     
-    args = parser.parse_args()
+    args = arg_parser.parse_args()
+    
+    # Create console for output
+    console = Console()
     
     # Validate inputs
     if not os.path.exists(args.csv):
-        print(f"Error: CSV file not found: {args.csv}")
+        console.print(f"[red]Error:[/red] CSV file not found: {args.csv}")
         sys.exit(1)
     
     if not os.path.exists(args.template):
-        print(f"Error: Template file not found: {args.template}")
+        console.print(f"[red]Error:[/red] Template file not found: {args.template}")
         sys.exit(1)
     
     try:
         # Parse CSV
+        console.print(f"[cyan]Reading CSV file:[/cyan] {args.csv}")
         parser = CanvasQuizParser(args.csv)
-        parser.parse()
+        parser.parse(silent=True)
         
         # Get student data
         students = parser.get_student_data(limit=args.limit)
-        print(f"\nFound {len(students)} students with essay answers")
+        console.print(f"\n[cyan]Found {len(students)} students with essay answers[/cyan]")
         
         if not students:
-            print("No students found with graded essay questions.")
+            console.print("[yellow]No students found with graded essay questions.[/yellow]")
             return
         
         # Extract quiz title from CSV filename
         csv_filename = os.path.basename(args.csv)
         # Remove " Student Analysis Report.csv" or just ".csv" if pattern doesn't match
         quiz_title = csv_filename.replace(' Student Analysis Report.csv', '').replace('.csv', '')
-        print(f"Quiz title: {quiz_title}")
+        console.print(f"[cyan]Quiz title:[/cyan] {quiz_title}\n")
         
-        # Generate LaTeX files
-        generator = LaTeXGenerator(args.template, args.output, quiz_title)
+        # Generate LaTeX files with progress tracking
+        generator = LaTeXGenerator(args.template, args.output, quiz_title, console)
         
         success_count = 0
         pdf_success_count = 0
         
-        for student in students:
-            try:
-                tex_filepath = generator.generate_latex_file(student)
-                success_count += 1
-                
-                # Compile to PDF unless --no-pdf flag is set
-                if not args.no_pdf:
-                    if generator.compile_pdf(tex_filepath):
-                        pdf_success_count += 1
-                        
-            except Exception as e:
-                print(f"Error processing {student['name']}: {e}")
-                continue
+        # Create progress bar
+        progress = Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TextColumn("•"),
+            TextColumn("{task.completed}/{task.total}"),
+            TimeElapsedColumn(),
+            console=console,
+        )
+        
+        with Live(progress, console=console, refresh_per_second=10):
+            task_id = progress.add_task(
+                "[cyan]Processing students...",
+                total=len(students)
+            )
+            
+            for idx, student in enumerate(students, 1):
+                try:
+                    # Update progress description
+                    progress.update(
+                        task_id,
+                        description=f"[cyan]Processing: {student['name']}"
+                    )
+                    
+                    tex_filepath = generator.generate_latex_file(student)
+                    success_count += 1
+                    
+                    # Compile to PDF unless --no-pdf flag is set
+                    if not args.no_pdf:
+                        if generator.compile_pdf(tex_filepath):
+                            pdf_success_count += 1
+                    
+                    # Update progress
+                    progress.update(task_id, advance=1)
+                            
+                except Exception as e:
+                    console.print(f"[red]✗[/red] Error processing {student['name']}: {e}")
+                    progress.update(task_id, advance=1)
+                    continue
         
         # Summary
-        print(f"\n{'='*60}")
-        print(f"Summary:")
-        print(f"  LaTeX files generated: {success_count}/{len(students)}")
+        console.print()
+        summary_text = f"""[bold cyan]Summary:[/bold cyan]
+  LaTeX files generated: [green]{success_count}[/green]/[cyan]{len(students)}[/cyan]"""
+        
         if not args.no_pdf:
-            print(f"  PDFs compiled: {pdf_success_count}/{len(students)}")
-        print(f"  Output directory: {args.output}")
-        print(f"{'='*60}")
+            summary_text += f"\n  PDFs compiled: [blue]{pdf_success_count}[/blue]/[cyan]{len(students)}[/cyan]"
+        
+        summary_text += f"\n  Output directory: [yellow]{args.output}[/yellow]"
+        
+        console.print(Panel(summary_text, border_style="cyan", padding=(1, 2)))
         
     except Exception as e:
-        print(f"Error: {e}")
+        console.print(f"[red]Error:[/red] {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)
