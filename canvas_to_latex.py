@@ -318,6 +318,13 @@ class LaTeXGenerator:
         self.template_path = template_path
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Create subdirectories for latex and pdf files
+        self.latex_dir = self.output_dir / 'latex'
+        self.pdf_dir = self.output_dir / 'pdf'
+        self.latex_dir.mkdir(parents=True, exist_ok=True)
+        self.pdf_dir.mkdir(parents=True, exist_ok=True)
+        
         self.quiz_title = quiz_title
         self.console = console or Console()
         
@@ -394,7 +401,7 @@ class LaTeXGenerator:
         """Generate LaTeX file for a student."""
         # Create filename
         filename = self.sanitize_filename(student['name']) + '.tex'
-        filepath = self.output_dir / filename
+        filepath = self.latex_dir / filename
         
         # Generate questions section
         questions_section = self.generate_questions_section(student['questions'])
@@ -409,28 +416,33 @@ class LaTeXGenerator:
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(content)
         
-        self.console.print(f"[green]✓[/green] Generated: {filepath}")
+        self.console.print(f"[green]✓[/green] Generated LaTeX: {filepath}")
         return filepath
     
     def compile_pdf(self, tex_filepath: Path) -> bool:
         """Compile LaTeX file to PDF using pdflatex."""
         try:
-            # Run pdflatex twice for proper references
+            # Run pdflatex twice for proper references, outputting to latex directory first
             for _ in range(2):
                 result = subprocess.run(
                     ['pdflatex', '-interaction=nonstopmode', '-output-directory',
-                     str(self.output_dir), str(tex_filepath)],
+                     str(self.latex_dir), str(tex_filepath)],
                     capture_output=True,
                     text=True,
                     timeout=30
                 )
             
-            # Check if PDF was created
-            pdf_path = tex_filepath.with_suffix('.pdf')
-            if pdf_path.exists():
-                self.console.print(f"[blue]✓[/blue] Compiled PDF: {pdf_path}")
+            # Check if PDF was created in latex directory
+            pdf_path_temp = tex_filepath.with_suffix('.pdf')
+            if pdf_path_temp.exists():
+                # Move PDF to pdf directory
+                pdf_filename = pdf_path_temp.name
+                pdf_path_final = self.pdf_dir / pdf_filename
+                pdf_path_temp.rename(pdf_path_final)
                 
-                # Clean up auxiliary files
+                self.console.print(f"[blue]✓[/blue] Compiled PDF: {pdf_path_final}")
+                
+                # Clean up auxiliary files in latex directory
                 for ext in ['.aux', '.log', '.out']:
                     aux_file = tex_filepath.with_suffix(ext)
                     if aux_file.exists():
@@ -575,7 +587,9 @@ def main():
         if not args.no_pdf:
             summary_text += f"\n  PDFs compiled: [blue]{pdf_success_count}[/blue]/[cyan]{len(students)}[/cyan]"
         
-        summary_text += f"\n  Output directory: [yellow]{args.output}[/yellow]"
+        summary_text += f"\n  LaTeX directory: [yellow]{generator.latex_dir}[/yellow]"
+        if not args.no_pdf:
+            summary_text += f"\n  PDF directory: [yellow]{generator.pdf_dir}[/yellow]"
         
         console.print(Panel(summary_text, border_style="cyan", padding=(1, 2)))
         
