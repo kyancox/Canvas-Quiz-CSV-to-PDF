@@ -56,7 +56,7 @@ To export the quiz data from Canvas, navigate to your quiz, then:
 - Click the "Reports" tab
 - Under "Student Analysis", click "Generate"
 - Then, click "Export CSV" to download the file
-- Place the csv file in this directory
+- Place the CSV file in this directory
 
 ### Advanced Options
 
