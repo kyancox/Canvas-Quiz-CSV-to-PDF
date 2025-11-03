@@ -76,6 +76,64 @@ class HTMLToLatexConverter:
         # If no LaTeX found, return empty string
         return ''
     
+    @staticmethod
+    def convert_html_table_to_latex(table_tag) -> str:
+        """Convert HTML table to LaTeX tabular environment."""
+        rows = []
+        
+        # Find all rows (both in thead and tbody)
+        for tr in table_tag.find_all('tr'):
+            cells = []
+            # Get both th and td cells
+            for cell in tr.find_all(['td', 'th']):
+                cell_text = cell.get_text(strip=True)
+                # Escape LaTeX special chars in table cells (but NOT &, we'll use that as separator)
+                cell_text = cell_text.replace('%', r'\%')
+                cell_text = cell_text.replace('#', r'\#')
+                cell_text = cell_text.replace('_', r'\_')
+                cell_text = cell_text.replace('$', r'\$')
+                cells.append(cell_text)
+            
+            if cells:  # Only add non-empty rows
+                rows.append(cells)
+        
+        if not rows:
+            return ''
+        
+        # Determine number of columns from first row
+        num_cols = len(rows[0])
+        
+        # Create LaTeX table
+        # Use 'c' (centered) alignment for all columns
+        col_spec = '|' + '|'.join(['c'] * num_cols) + '|'
+        
+        # Use a placeholder for & that won't be escaped later
+        COLSEP = '<<<LATEX_AMPERSAND>>>'
+        
+        latex_lines = [
+            '',
+            r'\begin{center}',
+            r'\begin{tabular}{' + col_spec + '}',
+            r'\hline'
+        ]
+        
+        for i, row in enumerate(rows):
+            # Pad row with empty cells if needed
+            while len(row) < num_cols:
+                row.append('')
+            
+            # Join cells with placeholder and end with '\\'
+            latex_lines.append(f' {COLSEP} '.join(row) + r' \\')
+            latex_lines.append(r'\hline')
+        
+        latex_lines.extend([
+            r'\end{tabular}',
+            r'\end{center}',
+            ''
+        ])
+        
+        return '\n'.join(latex_lines)
+    
     @classmethod
     def html_to_latex(cls, html_content: str, is_question: bool = False) -> str:
         """Convert HTML content to LaTeX."""
@@ -132,6 +190,12 @@ class HTMLToLatexConverter:
             latex = cls.convert_equation_image(img)
             # Add spaces around the equation to preserve word boundaries
             img.replace_with(f' {latex} ')
+        
+        # Handle HTML tables - convert to LaTeX tables
+        for table in soup.find_all('table'):
+            latex_table = cls.convert_html_table_to_latex(table)
+            # Replace the table tag with LaTeX table markup
+            table.replace_with(latex_table)
         
         # Convert HTML tags to LaTeX
         for tag in soup.find_all('strong') + soup.find_all('b'):
@@ -205,6 +269,9 @@ class HTMLToLatexConverter:
             for char in ['&', '%', '$', '#', '_']:
                 if char in cls.LATEX_SPECIAL_CHARS:
                     text = text.replace(char, cls.LATEX_SPECIAL_CHARS[char])
+        
+        # Replace table column separator placeholder with actual &
+        text = text.replace('<<<LATEX_AMPERSAND>>>', '&')
         
         return text
 
