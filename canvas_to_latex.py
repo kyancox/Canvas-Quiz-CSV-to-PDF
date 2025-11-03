@@ -289,9 +289,10 @@ class CanvasQuizParser:
                 status = row.iloc[status_col]
                 answer = row.iloc[q_info['question_col']]
                 
-                # Only include essay questions that were graded and have an answer
+                # Only include essay questions that have an answer (regardless of grading status)
+                # This includes both "Graded" and "Not Graded" questions
                 if (item_type == 'essay' and 
-                    status == 'Graded' and 
+                    status in ['Graded', 'Not Graded'] and 
                     pd.notna(answer) and 
                     str(answer).strip() != ''):
                     
